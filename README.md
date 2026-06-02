@@ -28,7 +28,7 @@ Bash
 python src/probe_server.py
 3. Run the Inspector Client
 Simulate an LLM orchestrating the tool call and capture the raw payloads.
-Bash
+```Bash
 python src/inspector_client.py
 🔍 Payload Inspection (What We Are Looking At)
 We are hunting for the raw schema to see how LLMs digest tool outputs. The focus is on capturing the exact JSON-RPC structure during the tools/call lifecycle:
