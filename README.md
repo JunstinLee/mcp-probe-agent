@@ -46,7 +46,7 @@ JSON
 }
 Intercepting this allows us to design precise serialization layers for our upcoming Agent framework.
 
-
+---
 🛡️ Security Audit & Blast Radius Analysis
 An ecosystem built on seamless tool calling is a breeding ground for remote code execution and data exfiltration. This repository is actively used to map out defenses against three critical threat vectors:
 1. Indirect Prompt Injection
@@ -58,9 +58,13 @@ Framework Defense: Strict Pydantic-based regex matching and chroot-like path san
 3. Human-in-the-Loop (HITL) Routing
 The Risk: Unvalidated mutations (write, delete, shell execution) executing autonomously.
 Framework Defense: Mapping out a non-blocking approval gateway. Designing a structural middleware where sensitive MCP tools require explicit user confirmation via a CLI/Web UI prompt.
+
+---
 🗺️ Roadmap to Agent Framework Integration
 [ ] Phase 1: Complete raw JSON telemetry capturing for resources, tools, and prompts.
 [ ] Phase 2: Simulate exploit payloads (Prompt Injection) on local LLMs to test context hijacking.
 [ ] Phase 3: Extract sanitized schemas and abstract them into our core, production-grade Agent framework.
+
+---
 🤝 Collaboration & Contribution
 If you are building Agent architectures and refuse to trust third-party protocol abstractions blindly, feel free to open an Issue or submit a PR with your security findings.
