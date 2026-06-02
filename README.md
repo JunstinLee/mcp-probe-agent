@@ -1,4 +1,3 @@
-```markdown
 # mcp-probe-agent
 
 A lightweight, Python-based probe environment and security sandbox designed to dissect Anthropic's Model Context Protocol (MCP), inspect raw JSON telemetry, and audit exploit vectors before full-scale Agent framework secondary development.
@@ -124,4 +123,3 @@ If you are an Agent architect who values security, telemetry clarity, and perfor
 
 ```
 
-```
