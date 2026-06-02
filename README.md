@@ -1,70 +1,127 @@
+```markdown
 # mcp-probe-agent
 
-A lightweight, Python-based probe environment designed to dissect Anthropic's Model Context Protocol (MCP), inspect payload structures, and audit security vulnerabilities before full-scale LLM Agent framework development.
+A lightweight, Python-based probe environment and security sandbox designed to dissect Anthropic's Model Context Protocol (MCP), inspect raw JSON telemetry, and audit exploit vectors before full-scale Agent framework secondary development.
 
 ---
 
-## ⚡ Why This Repository Exists (The TL;DR)
+## ⚡ Why This Repository Exists (The Strategic TL;DR)
 
-While the Model Context Protocol (MCP) can sometimes feel over-engineered, it has become the undeniable gravitational well for open-source LLM tools and data sources. To build a robust, production-ready Agent framework, you cannot bypass it. 
+While the Model Context Protocol (MCP) can sometimes feel like an over-engineered hype-train, it has undeniably become the gravitational well for open-source LLM tools and data sources. To build a highly compatible, next-generation Agent framework, you simply cannot bypass it. 
 
-This repository serves as a **lightweight sandbox** to:
-1. **Minimize Setup Overhead:** Spin up MCP servers/clients instantly using minimal Python.
-2. **Expose Raw JSON Payloads:** Inspect the exact data structures flying over the wire.
-3. **Audit Security Vulnerabilities:** Map out critical attack vectors (Prompt Injection, Path Traversal) to prepare our core framework's defense layer (e.g., Human-in-the-Loop gating).
+However, trusting third-party protocol abstractions blindly is a recipe for architectural disaster. This repository serves as a **zero-overhead telemetry sandbox** to achieve three tactical goals:
+
+1. **Unmask the Protocol:** Use a bare-minimum Python implementation to strip away the fluff and expose the raw JSON-RPC 2.0 payloads.
+2. **Telemetry Inspection:** See *exactly* what data structures, schemas, and metadata are flying over the wire when an LLM requests a tool or resource.
+3. **Security Defusal:** Map out critical threat vectors (Indirect Prompt Injection, Path Traversal) and establish framework-level defense blueprints (e.g., Human-in-the-Loop gating) before writing a single line of production framework code.
 
 ---
 
-## 🏗️ Architecture & Quick Start
+## 🏗️ Architecture & Component Layout
 
-This sandbox implements a minimal MCP Client-Server loop using the official `mcp` Python SDK to intercept and log every single JSON-RPC 2.0 packet.
+This sandbox bypasses complex wrappers, using the official `mcp` Python SDK to intercept and log every single network packet into a readable telemetry stream.
 
-### 1. Prerequisites
+
+```
+
+mcp-probe-agent/
+├── src/
+│   ├── **init**.py
+│   ├── probe_server.py      # Bare-minimum MCP Server exposing mocked filesystems/DBs
+│   ├── inspector_client.py  # Host Client simulating LLM tool-calling orchestration
+│   └── logger.py            # Raw JSON packet capturer & formatter
+├── exploits/
+│   └── payloads.json        # Test cases for Prompt Injection and Directory Traversal
+├── requirements.txt
+└── README.md
+
+```
+
+---
+
+## 🚀 Quick Start (Telemetry Mode)
+
+### 1. Environment Setup
 ```bash
+# Clone the repository
+git clone [https://github.com/your-username/mcp-probe-agent.git](https://github.com/your-username/mcp-probe-agent.git)
+cd mcp-probe-agent
+
+# Install minimal dependencies
 pip install mcp pydantic
-2. Run the Probe Server
-A bare-minimum server exposing a mocked filesystem or database tool to inspect parameter bindings.
-Bash
-python src/probe_server.py
-3. Run the Inspector Client
-Simulate an LLM orchestrating the tool call and capture the raw payloads.
-```Bash
-python src/inspector_client.py
-🔍 Payload Inspection (What We Are Looking At)
-We are hunting for the raw schema to see how LLMs digest tool outputs. The focus is on capturing the exact JSON-RPC structure during the tools/call lifecycle:
-JSON
+
+```
+
+### 2. Launch the Telemetry Probe Loop
+
+Open two terminal windows to witness the live communication:
+
+* **Terminal 1 (The Server Side):** Exposes tools and resources.
+
+```bash
+  python src/probe_server.py
+
+```
+
+* **Terminal 2 (The Client/Inspector Side):** Triggers the mock LLM Agent tool execution.
+
+```bash
+  python src/inspector_client.py
+
+```
+
+---
+
+## 🔍 Payload Inspection: Under the Hood
+
+We are hunting for the raw schema to see how the orchestration layer digests tool outputs. Below is the exact captured JSON-RPC data structure during a telemetry audit of the `tools/call` lifecycle:
+
+```json
 {
   "jsonrpc": "2.0",
   "method": "tools/call",
   "params": {
     "name": "read_secure_file",
     "arguments": {
-      "path": "../../etc/passwd" 
+      "path": "../../etc/passwd",
+      "reason": "Overriding path restrictions via semantic context injection"
     }
   },
   "id": 42
 }
-Intercepting this allows us to design precise serialization layers for our upcoming Agent framework.
+
+```
+
+### Key Observation Points:
+
+* **Argument Bound Rigidness:** How strictly does the MCP protocol enforce type validation based on the generated Pydantic schema?
+* **Context Mutation Bloat:** How much tokens/overhead does the protocol inject into the LLM context wrapper during error handling?
 
 ---
-🛡️ Security Audit & Blast Radius Analysis
-An ecosystem built on seamless tool calling is a breeding ground for remote code execution and data exfiltration. This repository is actively used to map out defenses against three critical threat vectors:
-1. Indirect Prompt Injection
-The Risk: An external data source (e.g., an untrusted webpage fetched via an MCP tool) contains malicious instructions that hijack the LLM's system prompt.
-Framework Defense: Implementation of semantic shields and strict output validation before passing MCP data back to the LLM context.
-2. Path Traversal & Argument Sanitization
-The Risk: The LLM generates malicious arguments (e.g., path: "/../../../etc/passwd") due to jailbreaking or flawed planning.
-Framework Defense: Strict Pydantic-based regex matching and chroot-like path sandboxing at the framework layer before hitting the MCP protocol bridge.
-3. Human-in-the-Loop (HITL) Routing
-The Risk: Unvalidated mutations (write, delete, shell execution) executing autonomously.
-Framework Defense: Mapping out a non-blocking approval gateway. Designing a structural middleware where sensitive MCP tools require explicit user confirmation via a CLI/Web UI prompt.
+
+## 🛡️ Security Audit & Framework Blast Radius Analysis
+
+An ecosystem built on seamless, automated tool calling is a playground for remote exploits. This sandbox is actively used to simulate and patch three critical vulnerabilities:
+
+| Threat Vector | Attack Scenario | Framework-Level Mitigation Blueprint |
+| --- | --- | --- |
+| **Indirect Prompt Injection** | An untrusted webpage fetched via an MCP scraper tool contains hidden text instructions that hijack the LLM's system prompt. | **Semantic Shielding:** Isolate tool outputs in non-executable data blocks; never allow raw tool returns to append directly to system instructions. |
+| **Path Traversal / Argument Poisoning** | The LLM generates malicious arguments (e.g., `path: "../../../etc/passwd"`) due to jailbreaking or flawed planning loops. | **Strict Interception:** Pydantic-based regex matching and chroot-like file-path sandboxing at the framework layer *before* protocol serialization. |
+| **Autonomous Mutation Exploit** | Unvalidated mutation commands (write, delete, shell execution) executing without boundary controls. | **Human-in-the-Loop (HITL) Router:** Structuring a non-blocking approval middleware. High-risk MCP tool categories require explicit CLI/UI confirmation. |
 
 ---
-🗺️ Roadmap to Agent Framework Integration
-[ ] Phase 1: Complete raw JSON telemetry capturing for resources, tools, and prompts.
-[ ] Phase 2: Simulate exploit payloads (Prompt Injection) on local LLMs to test context hijacking.
-[ ] Phase 3: Extract sanitized schemas and abstract them into our core, production-grade Agent framework.
 
----
-🤝 Collaboration & Contribution
-If you are building Agent architectures and refuse to trust third-party protocol abstractions blindly, feel free to open an Issue or submit a PR with your security findings.
+## 🗺️ Roadmap to Secondary Framework Development
+
+* [x] **Phase 1:** Stand up minimal Python Client/Server architecture.
+* [ ] **Phase 2:** Implement raw JSON file logging for all `resources/list`, `tools/call`, and `prompts/get` interactions.
+* [ ] **Phase 3:** Simulate exploit injection payloads on local open-source LLMs to analyze context hijacking boundaries.
+* [ ] **Phase 4:** Abstract these security filters into the middleware layer of our upcoming proprietary/secondary Agent framework.
+
+## 🤝 Collab & Brainstorming
+
+If you are an Agent architect who values security, telemetry clarity, and performance over market hype, let's connect. Open an Issue with your payload inspection logs or submit a PR for new security test cases.
+
+```
+
+```
