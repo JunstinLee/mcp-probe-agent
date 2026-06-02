@@ -109,3 +109,25 @@ def validate_required_args(args: dict, required: list[str], allowed: list[str]) 
 
     # Return filtered args
     return {k: args[k] for k in allowed if k in args}
+
+
+# ---------------------------------------------------------------------------
+# validate_url
+# ---------------------------------------------------------------------------
+
+_BLOCKED_HOST_RE = re.compile(
+    r"^(?:0\.0\.0\.0|127\.|10\.|172\.(?:1[6-9]|2[0-9]|3[01])\.|192\.168\.|169\.254\.)",
+)
+
+
+def validate_url(url: str) -> None:
+    """
+    Reject URLs that point to private/internal networks or cloud metadata endpoints.
+
+    Raises ValueError if the host matches a blocked prefix.
+    """
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    host = parsed.hostname or ""
+    if _BLOCKED_HOST_RE.match(host):
+        raise ValueError(f"access to internal address {host} is forbidden")

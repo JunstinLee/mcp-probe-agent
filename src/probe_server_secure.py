@@ -24,7 +24,12 @@ if _project_root not in sys.path:
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 
-from src.validators import validate_sandbox_path, sanitize_output, validate_required_args
+from src.validators import (
+    sanitize_output,
+    validate_required_args,
+    validate_sandbox_path,
+    validate_url,
+)
 
 SANDBOX_DIR_SECURE = "/tmp/mcp_sandbox_secure"
 
@@ -111,6 +116,11 @@ def write_file(path: str, content: str) -> str:
 @server.tool()
 def scrape_webpage(url: str) -> str:
     """Scrape a webpage and return its text content."""
+    try:
+        validate_url(url)
+    except ValueError as exc:
+        raise ToolError(f"Security: {exc}")
+
     raw = (
         f"[SIMULATED] Content from {url}\n"
         "---\n"
