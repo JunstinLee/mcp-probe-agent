@@ -163,3 +163,6 @@ Temporary Items
 uv.lock
 
 .sisyphus
+
+# Runtime output directory (logs, reports, telemetry snapshots)
+output/

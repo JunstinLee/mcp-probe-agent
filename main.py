@@ -11,70 +11,9 @@ Commands:
 from __future__ import annotations
 
 import argparse
-import os
-import shutil
-import subprocess
 import sys
-from pathlib import Path
 
-
-def _python() -> list[str]:
-    return [sys.executable]
-
-
-def cmd_run_vuln() -> None:
-    """Start the vulnerable MCP server."""
-    print("[CLI] Starting vulnerable MCP server on port 8765 ...")
-    os.makedirs("/tmp/mcp_sandbox", exist_ok=True)
-    subprocess.run([*_python(), "src/probe_server.py"], check=False)
-
-
-def cmd_run_secure() -> None:
-    """Start the secure MCP server."""
-    print("[CLI] Starting secure MCP server on port 8766 ...")
-    os.makedirs("/tmp/mcp_sandbox_secure", exist_ok=True)
-    subprocess.run([*_python(), "src/probe_server_secure.py"], check=False)
-
-
-def cmd_attack(args: argparse.Namespace) -> None:
-    """Run the attack orchestrator."""
-    target = args.target or "both"
-    print(f"[CLI] Running attack orchestrator --target={target} ...")
-    subprocess.run(
-        [*_python(), "src/inspector_client.py", "--target", target],
-        check=False,
-    )
-
-
-def cmd_test() -> None:
-    """Run the pytest test suite."""
-    print("[CLI] Running tests ...")
-    result = subprocess.run(
-        [*_python(), "-m", "pytest", "tests/", "-v"],
-        check=False,
-    )
-    sys.exit(result.returncode)
-
-
-def cmd_clean() -> None:
-    """Remove temporary sandbox directories and log files."""
-    paths: list[Path] = [
-        Path("/tmp/mcp_sandbox"),
-        Path("/tmp/mcp_sandbox_secure"),
-    ]
-    src = Path(__file__).resolve().parent / "src"
-    for pattern in ["*.log.jsonl", "mcp_telemetry_*.jsonl", "attack_report.json"]:
-        paths.extend(src.glob(pattern))
-
-    for p in paths:
-        if p.is_dir():
-            shutil.rmtree(p, ignore_errors=True)
-            print(f"[CLEAN] Removed directory: {p}")
-        elif p.is_file():
-            p.unlink(missing_ok=True)
-            print(f"[CLEAN] Removed file: {p}")
-
-    print("[CLEAN] Done.")
+from src.cli.commands import cmd_attack, cmd_clean, cmd_run_secure, cmd_run_vuln, cmd_test
 
 
 def main() -> None:

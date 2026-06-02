@@ -28,7 +28,7 @@ from typing import Any
 from mcp import ClientSession, types
 from mcp.client.sse import sse_client
 
-from logger import flush, log_packet
+from logger import flush, get_run_dir, log_packet
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -40,7 +40,6 @@ VULNERABLE_PORT = 8765
 SECURE_PORT = 8766
 
 PAYLOADS_PATH = Path(__file__).resolve().parent.parent / "exploits" / "payloads.json"
-REPORT_PATH = Path(__file__).resolve().parent / "attack_report.json"
 
 
 # ---------------------------------------------------------------------------
@@ -176,9 +175,8 @@ def compare_results(
 
 def generate_report(
     results: list[dict[str, Any]],
-    output_path: Path,
-) -> None:
-    """Write a JSON report with timestamp, results, and summary."""
+) -> Path:
+    """Write a JSON report with timestamp, results, and summary into the run directory."""
     passed_count = sum(1 for r in results if r.get("passed", False))
     failed_count = len(results) - passed_count
 
@@ -192,10 +190,12 @@ def generate_report(
         },
     }
 
+    output_path = get_run_dir() / "attack_report.json"
     with open(output_path, "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=2, ensure_ascii=False)
 
     print(f"[ORCHESTRATOR] Report written to {output_path}")
+    return output_path
 
 
 # ---------------------------------------------------------------------------
@@ -255,6 +255,7 @@ async def orchestrate(target: str) -> None:
         target: One of 'vulnerable', 'secure', or 'both'.
     """
     all_payloads = load_payloads()
+    report_path: Path | None = None
 
     if target == "vulnerable":
         payloads = load_payloads("vulnerable")
@@ -265,7 +266,7 @@ async def orchestrate(target: str) -> None:
         results = await _run_payloads_against_server(
             payloads, VULNERABLE_PORT, "vulnerable"
         )
-        generate_report(results, REPORT_PATH)
+        report_path = generate_report(results)
 
     elif target == "secure":
         payloads = load_payloads("secure")
@@ -276,7 +277,7 @@ async def orchestrate(target: str) -> None:
         results = await _run_payloads_against_server(
             payloads, SECURE_PORT, "secure"
         )
-        generate_report(results, REPORT_PATH)
+        report_path = generate_report(results)
 
     elif target == "both":
         print(
@@ -290,10 +291,10 @@ async def orchestrate(target: str) -> None:
             all_payloads, SECURE_PORT, "secure"
         )
         combined = vuln_results + secure_results
-        generate_report(combined, REPORT_PATH)
+        report_path = generate_report(combined)
 
-    # Print summary
-    report = json.loads(REPORT_PATH.read_text(encoding="utf-8"))
+    assert report_path is not None
+    report = json.loads(report_path.read_text(encoding="utf-8"))
     s = report["summary"]
     print(
         f"\n[ORCHESTRATOR] Summary: {s['passed']}/{report['total_payloads']} passed, "

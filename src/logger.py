@@ -11,9 +11,35 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-# Global capture buffer; can be flushed to disk or stdout.
+# ---------------------------------------------------------------------------
+# Output directory management
+# ---------------------------------------------------------------------------
+
+_OUTPUT_BASE = Path(__file__).resolve().parent.parent / "output"
+_run_dir: Path | None = None
+
+
+def get_run_dir() -> Path:
+    """Return (and create if needed) a timestamped sub-directory under output/."""
+    global _run_dir
+    if _run_dir is None:
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
+        _run_dir = _OUTPUT_BASE / ts
+        _run_dir.mkdir(parents=True, exist_ok=True)
+    return _run_dir
+
+
+def reset_run_dir() -> None:
+    """Reset the run directory so the next call to get_run_dir() creates a fresh one."""
+    global _run_dir
+    _run_dir = None
+
+
+# ---------------------------------------------------------------------------
+# Logging internals
+# ---------------------------------------------------------------------------
+
 _capture_buffer: list[dict[str, Any]] = []
-_LOG_PATH = Path(__file__).with_suffix(".log.jsonl")
 
 # Level constants
 _LEVELS = {"DEBUG": 10, "INFO": 20, "WARN": 30, "ERROR": 40}
@@ -99,19 +125,19 @@ def log_packet(direction: str, payload: dict[str, Any] | str) -> None:
         print(f"\n[TELEMETRY] {direction.upper()} | {_now()}", file=sys.stderr)
         print(json.dumps(entry, indent=2, ensure_ascii=False), file=sys.stderr)
 
-    _rotate_if_needed(_LOG_PATH)
+    log_path = get_run_dir() / "mcp_telemetry.jsonl"
+    _rotate_if_needed(log_path)
 
-    with open(_LOG_PATH, "a", encoding="utf-8") as fh:
+    with open(log_path, "a", encoding="utf-8") as fh:
         fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
 def flush() -> Path:
-    """Flush the in-memory buffer to a JSONL file and return the path."""
+    """Flush the in-memory buffer to a JSONL file inside the run directory."""
     if not _capture_buffer:
-        return _LOG_PATH
+        return get_run_dir()
 
-    # Write atomically to a timestamped snapshot.
-    snapshot = Path(__file__).parent / f"mcp_telemetry_{_now().replace(':', '-')}.jsonl"
+    snapshot = get_run_dir() / "mcp_telemetry_snapshot.jsonl"
     with open(snapshot, "w", encoding="utf-8") as fh:
         for entry in _capture_buffer:
             fh.write(json.dumps(entry, ensure_ascii=False) + "\n")

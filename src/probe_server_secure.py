@@ -83,9 +83,17 @@ def query_mock_db(table: str) -> str:
     return f"[OK] table={table}\n{rows}"
 
 
+MAX_WRITE_SIZE = 1024 * 1024  # 1 MB
+
+
 @server.tool()
 def write_file(path: str, content: str) -> str:
     """Write content to a file in the sandbox."""
+    if len(content) > MAX_WRITE_SIZE:
+        raise ToolError(
+            f"Security: content exceeds maximum write size of {MAX_WRITE_SIZE} bytes"
+        )
+
     try:
         target = validate_sandbox_path(path, SANDBOX_DIR_SECURE)
     except ValueError as exc:
