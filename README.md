@@ -120,6 +120,3 @@ An ecosystem built on seamless, automated tool calling is a playground for remot
 ## 🤝 Collab & Brainstorming
 
 If you are an Agent architect who values security, telemetry clarity, and performance over market hype, let's connect. Open an Issue with your payload inspection logs or submit a PR for new security test cases.
-
-```
-
