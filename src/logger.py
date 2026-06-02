@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
+import re
+import shutil
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,9 +15,52 @@ from typing import Any
 _capture_buffer: list[dict[str, Any]] = []
 _LOG_PATH = Path(__file__).with_suffix(".log.jsonl")
 
+# Level constants
+_LEVELS = {"DEBUG": 10, "INFO": 20, "WARN": 30, "ERROR": 40}
+_DEFAULT_LEVEL = 10  # DEBUG
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _redact_sensitive(payload: dict[str, Any]) -> dict[str, Any]:
+    """Recursively replace sensitive field values with [REDACTED]."""
+    sensitive_pattern = re.compile(
+        r"(api[_-]?key|password|secret|token)",
+        re.IGNORECASE
+    )
+    result = {}
+    for key, value in payload.items():
+        if sensitive_pattern.search(key):
+            result[key] = "[REDACTED]"
+        elif isinstance(value, dict):
+            result[key] = _redact_sensitive(value)
+        elif isinstance(value, list):
+            result[key] = [
+                _redact_sensitive(item) if isinstance(item, dict) else item
+                for item in value
+            ]
+        else:
+            result[key] = value
+    return result
+
+
+def _rotate_if_needed(log_path: Path, max_size: int = 10 * 1024 * 1024) -> None:
+    """Rotate log file if it exceeds max_size, keeping up to 3 backups."""
+    if not log_path.exists():
+        return
+    if log_path.stat().st_size < max_size:
+        return
+    if Path(str(log_path) + ".3").exists():
+        Path(str(log_path) + ".3").unlink()
+    if Path(str(log_path) + ".2").exists():
+        shutil.move(str(log_path) + ".2", str(log_path) + ".3")
+    if Path(str(log_path) + ".1").exists():
+        shutil.move(str(log_path) + ".1", str(log_path) + ".2")
+    shutil.copy2(log_path, str(log_path) + ".1")
+    with open(log_path, "w", encoding="utf-8") as fh:
+        pass
 
 
 def log_packet(direction: str, payload: dict[str, Any] | str) -> None:
@@ -40,13 +86,21 @@ def log_packet(direction: str, payload: dict[str, Any] | str) -> None:
         "payload": body,
     }
 
+    if os.environ.get("MCP_LOG_REDACT") == "1":
+        entry = _redact_sensitive(entry)
+
     _capture_buffer.append(entry)
 
-    # Pretty-print to stdout for live telemetry inspection.
-    print(f"\n[TELEMETRY] {direction.upper()} | {_now()}", file=sys.stderr)
-    print(json.dumps(entry, indent=2, ensure_ascii=False), file=sys.stderr)
+    log_level_str = os.environ.get("MCP_LOG_LEVEL", "DEBUG").upper()
+    log_level = _LEVELS.get(log_level_str, _DEFAULT_LEVEL)
+    effective_level = _LEVELS["WARN"] if (entry.get("method", "") or "").startswith("error") else _LEVELS["DEBUG"]
 
-    # Append to JSONL log for downstream analysis.
+    if effective_level >= log_level:
+        print(f"\n[TELEMETRY] {direction.upper()} | {_now()}", file=sys.stderr)
+        print(json.dumps(entry, indent=2, ensure_ascii=False), file=sys.stderr)
+
+    _rotate_if_needed(_LOG_PATH)
+
     with open(_LOG_PATH, "a", encoding="utf-8") as fh:
         fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
 

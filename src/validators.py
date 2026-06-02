@@ -1,0 +1,111 @@
+"""
+Pure-function validators for MCP probe agent security checks.
+No classes, no logging — callers handle errors.
+"""
+
+from __future__ import annotations
+
+import os
+import re
+from pathlib import Path
+
+
+# ---------------------------------------------------------------------------
+# validate_sandbox_path
+# ---------------------------------------------------------------------------
+
+
+def validate_sandbox_path(path: str, sandbox_dir: str) -> Path:
+    """
+    Validate that `path` resolves to a location inside `sandbox_dir`.
+
+    Security checks (in order):
+        1. Reject null bytes in the path string.
+        2. Resolve `sandbox_dir` once as the canonical base.
+        3. Join `path` with `sandbox_dir`, then resolve.
+        4. Verify the resolved path starts with the sandbox_dir prefix.
+        5. Reject symbolic links (potential symlink attacks).
+        6. Return the resolved Path object.
+
+    Raises ValueError if any check fails.
+    """
+    # 1. Reject null bytes
+    if "\0" in path:
+        raise ValueError("path contains null byte")
+
+    # 2. Resolve sandbox_dir once
+    sandbox_path = Path(sandbox_dir).resolve()
+
+    # 3. Join and resolve target path
+    target_path = Path(os.path.join(sandbox_dir, path)).resolve()
+
+    # 4. Prefix check — ensure target is under sandbox
+    if not target_path.is_relative_to(sandbox_path):
+        raise ValueError("path escapes sandbox")
+
+    # 5. Reject symlinks
+    if os.path.islink(target_path):
+        raise ValueError("path is a symbolic link")
+
+    # 6. Return resolved Path
+    return target_path
+
+
+# ---------------------------------------------------------------------------
+# sanitize_output
+# ---------------------------------------------------------------------------
+
+
+_INJECTION_RE = re.compile(
+    r"(?i)(ignore|disregard|forget)\s+(all\s+)?(previous|prior|above|before)\s+(instructions?|directives?|prompts?)",
+    re.DOTALL,
+)
+
+_DELIMITER_RE = re.compile(r"(?i)```system.*?```", re.DOTALL)
+
+
+def sanitize_output(text: str) -> str:
+    """
+    Remove prompt-injection patterns from LLM-generated output and wrap
+    the result in <tool_output> delimiters.
+
+    Replacements:
+        - Injection directives matching INJECTION_RE  → "[FILTERED]"
+        - System-delimiter blocks matching DELIMITER_RE → "[FILTERED-DELIMITER]"
+
+    The sanitized text is wrapped in <tool_output>\\n...\\n</tool_output>.
+    """
+    filtered = _INJECTION_RE.sub("[FILTERED]", text)
+    filtered = _DELIMITER_RE.sub("[FILTERED-DELIMITER]", filtered)
+    return f"<tool_output>\n{filtered}\n</tool_output>"
+
+
+# ---------------------------------------------------------------------------
+# validate_required_args
+# ---------------------------------------------------------------------------
+
+
+def validate_required_args(args: dict, required: list[str], allowed: list[str]) -> dict:
+    """
+    Validate that `args` contains all `required` keys with non-empty values
+    and contains no unknown keys outside `allowed`.
+
+    Returns a filtered dict containing only the keys in `allowed` that are
+    present in `args`.
+
+    Raises ValueError if:
+        - A required key is missing or empty.
+        - An unknown key (not in `allowed`) is present.
+    """
+    # Check for unknown keys
+    unknown = set(args.keys()) - set(allowed)
+    if unknown:
+        raise ValueError(f"unknown arguments: {', '.join(sorted(unknown))}")
+
+    # Check required keys
+    for key in required:
+        if key not in args or not args[key]:
+            raise ValueError(f"missing required argument: {key}")
+
+    # Return filtered args
+    return {k: args[k] for k in allowed if k in args}

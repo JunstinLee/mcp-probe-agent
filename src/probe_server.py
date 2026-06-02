@@ -23,7 +23,7 @@ from starlette.responses import Response
 from starlette.routing import Mount, Route
 
 
-from src.logger import log_packet
+from logger import log_packet
 
 SANDBOX_DIR = "/tmp/mcp_sandbox"
 
