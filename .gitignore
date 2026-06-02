@@ -166,3 +166,4 @@ uv.lock
 
 # Runtime output directory (logs, reports, telemetry snapshots)
 output/
+report
