@@ -45,6 +45,8 @@ JSON
   "id": 42
 }
 Intercepting this allows us to design precise serialization layers for our upcoming Agent framework.
+
+
 🛡️ Security Audit & Blast Radius Analysis
 An ecosystem built on seamless tool calling is a breeding ground for remote code execution and data exfiltration. This repository is actively used to map out defenses against three critical threat vectors:
 1. Indirect Prompt Injection
