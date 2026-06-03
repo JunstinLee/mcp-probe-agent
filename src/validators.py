@@ -11,6 +11,19 @@ from pathlib import Path
 
 
 # ---------------------------------------------------------------------------
+# Shell metacharacter guard (shared across validators)
+# ---------------------------------------------------------------------------
+
+_SHELL_META_RE = re.compile(r"[;|&$`\\n<>{}\\\[\\]]")
+
+
+def _reject_shell_meta(value: str, field_name: str = "path") -> None:
+    """Raise ValueError if `value` contains shell metacharacters."""
+    if _SHELL_META_RE.search(value):
+        raise ValueError(f"{field_name} contains shell metacharacters")
+
+
+# ---------------------------------------------------------------------------
 # validate_sandbox_path
 # ---------------------------------------------------------------------------
 
@@ -20,20 +33,24 @@ def validate_sandbox_path(path: str, sandbox_dir: str) -> Path:
     Validate that `path` resolves to a location inside `sandbox_dir`.
 
     Security checks (in order):
-        1. Reject null bytes in the path string.
-        2. Resolve `sandbox_dir` once as the canonical base.
-        3. Join `path` with `sandbox_dir`, then resolve.
-        4. Verify the resolved path starts with the sandbox_dir prefix.
-        5. Reject symbolic links (potential symlink attacks).
-        6. Return the resolved Path object.
+        1. Reject shell metacharacters in the path string.
+        2. Reject null bytes in the path string.
+        3. Resolve `sandbox_dir` once as the canonical base.
+        4. Join `path` with `sandbox_dir`, then resolve.
+        5. Verify the resolved path starts with the sandbox_dir prefix.
+        6. Reject symbolic links (potential symlink attacks).
+        7. Return the resolved Path object.
 
     Raises ValueError if any check fails.
     """
-    # 1. Reject null bytes
+    # 1. Reject shell metacharacters
+    _reject_shell_meta(path)
+
+    # 2. Reject null bytes
     if "\0" in path:
         raise ValueError("path contains null byte")
 
-    # 2. Resolve sandbox_dir once
+    # 3. Resolve sandbox_dir once
     sandbox_path = Path(sandbox_dir).resolve()
 
     # 3. Join and resolve target path
