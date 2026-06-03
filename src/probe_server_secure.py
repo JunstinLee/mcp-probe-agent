@@ -25,7 +25,9 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from starlette.middleware import Middleware
 
+from src.logger import log_packet
 from src.middleware.auth import BearerAuthMiddleware
+from src.security.dlp_scanner import scan_text
 from src.security.hitl_router import prompt_for_approval, require_human_approval
 from src.validators import (
     sanitize_output,
@@ -76,7 +78,10 @@ def read_secure_file(path: str, user_id: str = "anonymous") -> str:
     try:
         with open(target, "r", encoding="utf-8") as fh:
             data = fh.read()
-        return f"[OK] {target}\n---\n{data}"
+        masked, detected = scan_text(data)
+        if detected:
+            log_packet("dlp_alert", {"tool": "read_secure_file", "detected_types": detected, "path": str(target)})
+        return f"[OK] {target}\n---\n{masked}"
     except FileNotFoundError:
         raise ToolError(f"File not found: {target}")
     except Exception as exc:
@@ -102,7 +107,11 @@ def query_mock_db(table: str) -> str:
         raise ToolError(f"Unknown table: {table}")
 
     rows = "\n".join(f"  {k}: {v}" for k, v in MOCK_DB[table].items())
-    return f"[OK] table={table}\n{rows}"
+    output = f"[OK] table={table}\n{rows}"
+    masked, detected = scan_text(output)
+    if detected:
+        log_packet("dlp_alert", {"tool": "query_mock_db", "detected_types": detected, "table": table})
+    return masked
 
 
 MAX_WRITE_SIZE = 1024 * 1024  # 1 MB
@@ -158,6 +167,10 @@ def scrape_webpage(url: str) -> str:
             "---\n"
             "End of page."
         ),
+        "http://example.com/leaked-creds": (
+            "AccessKey: AKIAIOSFODNN7EXAMPLE, "
+            "Secret: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+        ),
     }
 
     raw = url_responses.get(
@@ -173,9 +186,14 @@ def scrape_webpage(url: str) -> str:
     )
 
     try:
-        return sanitize_output(raw)
+        sanitized = sanitize_output(raw)
     except ValueError as exc:
         raise ToolError(f"Security: {exc}")
+
+    masked, detected = scan_text(sanitized)
+    if detected:
+        log_packet("dlp_alert", {"tool": "scrape_webpage", "detected_types": detected})
+    return masked
 
 
 # ---------------------------------------------------------------------------
@@ -192,6 +210,12 @@ if __name__ == "__main__":
     if not os.path.exists(seed):
         with open(seed, "w", encoding="utf-8") as fh:
             fh.write("Hello from the MCP probe sandbox.\n")
+
+    secrets_file = os.path.join(seed_dir, "secrets.txt")
+    if not os.path.exists(secrets_file):
+        with open(secrets_file, "w", encoding="utf-8") as fh:
+            fh.write("api_key: sk-mock-123456789\n")
+            fh.write("db_password: hunter2\n")
 
     print(f"Starting secure MCP probe server on http://127.0.0.1:8766")
     print(f"  Sandbox base: {SANDBOX_BASE_DIR}")

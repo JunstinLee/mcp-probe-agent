@@ -27,6 +27,7 @@ from mcp import ClientSession, types
 from mcp.client.sse import sse_client
 
 from logger import flush, get_run_dir, log_packet
+from security.dlp_scanner import scan_text
 from security.token_budget import SessionBudget
 
 # ---------------------------------------------------------------------------
@@ -167,9 +168,14 @@ def generate_report(
         },
     }
 
+    report_text = json.dumps(report, ensure_ascii=False)
+    masked, detected = scan_text(report_text)
+    if detected:
+        print(f"[DLP] ⚠️ 报告输出中发现敏感字段: {detected}")
+
     output_path = get_run_dir() / "attack_report.json"
     with open(output_path, "w", encoding="utf-8") as fh:
-        json.dump(report, fh, indent=2, ensure_ascii=False)
+        fh.write(masked)
 
     print(f"[ORCHESTRATOR] Report written to {output_path}")
     return output_path
