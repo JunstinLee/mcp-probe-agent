@@ -27,7 +27,7 @@ from mcp import ClientSession, types
 from mcp.client.sse import sse_client
 
 from logger import flush, get_run_dir, log_packet
-from src.security.token_budget import SessionBudget
+from security.token_budget import SessionBudget
 
 # ---------------------------------------------------------------------------
 # Constants
