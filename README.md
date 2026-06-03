@@ -137,17 +137,11 @@ The secure server (`probe_server_secure.py`) currently passes **15/15** automate
 |---|--------|-------------------|-----------|
 | 1 | **Path Traversal** | `validate_sandbox_path()` — `Path.resolve()` + `is_relative_to()` sandbox locking | `tests/test_path_traversal.py` |
 | 2 | **Symlink Escape** | `os.path.islink()` — rejects all symlinks before access | `tests/test_path_traversal.py` |
-| 3 | **Command Injection** | No `shell=True` / `os.system()` present; relies on absence rather than explicit guardrail | *no dedicated test* |
+| 3 | **Command Injection** | `_reject_shell_meta()` — `frozenset` blacklist rejects `;\|&$`\n<>{}[]` in all path / filename arguments | `exploits/payloads.json` (orchestrator) |
 | 4 | **Application DoS** | `MAX_WRITE_SIZE = 1 MB` hard limit on writes | `tests/test_path_traversal.py` |
 | 7 | **SSRF (Basic)** | `validate_url()` regex blocks private ranges (`127/10/192.168/172.16-31/169.254`) | `tests/test_input_validation.py` |
 | 10 | **Prompt Injection (Basic)** | `sanitize_output()` — regex filters English trigger words + wraps output in `<tool_output>` tags | `tests/test_prompt_injection.py` |
-
-### ⚠️ Partial / No-Test Coverage
-
-| # | Threat | Status | Note |
-|---|--------|--------|------|
-| 3 | **Command Injection** | ⚠️ *Security by absence* | No explicit `subprocess_guard` or shell-metacharacter blacklist yet |
-| 10 | **Prompt Injection (Non-English)** | ⚠️ *Structural only* | `<tool_output>` wrapping works, but regex cannot catch multi-language / Base64 / obfuscated injections |
+| 10 | **Prompt Injection (Non-English)** | `sanitize_output()` — structural isolation via `<tool_output>` wrapping (language-agnostic) | `tests/test_prompt_injection.py` |
 
 ### ❌ Not Yet Implemented
 
