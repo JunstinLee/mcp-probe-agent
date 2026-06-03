@@ -88,13 +88,33 @@ python main.py clean
 
 Open two terminal windows to witness the raw JSON-RPC communication:
 
-```bash
-# Terminal 1 (Server)
-python src/probe_server.py        # Vulnerable:  http://127.0.0.1:8765
-python src/probe_server_secure.py  # Secure:      http://127.0.0.1:8766
+**Terminal 1 — Start a server**
 
-# Terminal 2 (Client)
+```bash
+# Vulnerable server (port 8765)
+python src/probe_server.py
+# Exposes:
+#   GET  /sse     — SSE event stream
+#   POST /message — JSON-RPC message ingress
+
+# Secure server (port 8766)
+python src/probe_server_secure.py
+```
+
+**Terminal 2 — Run the inspector / attack orchestrator**
+
+```bash
+# Test against the vulnerable server only
+python src/inspector_client.py --target vulnerable
+
+# Test against the secure server only
+python src/inspector_client.py --target secure
+
+# Test against both servers (default comparison mode)
 python src/inspector_client.py --target both
+
+# Print help
+python src/inspector_client.py
 ```
 
 ---
@@ -173,15 +193,6 @@ The secure server (`probe_server_secure.py`) currently passes **11/11** automate
 - [x] **Core guardrails:** Path sandboxing, symlink rejection, URL private-range blocking, write-size limits, basic prompt-injection regex filtering.
 - [x] **Comprehensive test suite:** 6 test modules covering path traversal, prompt injection, input validation, integration, A/B comparison, and smoke tests.
 - [x] **Unified CLI:** `main.py` exposes `run-vuln`, `run-secure`, `attack`, `test`, and `clean` commands.
-
-### Hardening Plans (see `.sisyphus/plans/`)
-
-| Plan | Layer | Key Deliverables |
-|------|-------|------------------|
-| [Plan 01](.sisyphus/plans/plan-01-input-execution-layer.md) | Input & Execution | Explicit `subprocess_guard`, shell-metacharacter blacklist, command-injection test payloads |
-| [Plan 02](.sisyphus/plans/plan-02-network-session-layer.md) | Network & Session | Bearer Token auth middleware, Nginx reverse-proxy config, DNS-rebinding SSRF socket-level check, per-user sandbox dirs |
-| [Plan 03](.sisyphus/plans/plan-03-semantic-cognitive-layer.md) | Semantic & Cognitive | Unicode normalization + Base64 detection in `sanitize_output()`, HITL CLI pause for high-risk tools, `max_turns=10` + token-budget fuse |
-| [Plan 04](.sisyphus/plans/plan-04-ecosystem-compliance-layer.md) | Ecosystem & Compliance | Docker sandbox driver (`--network none` by default), DLP scanner for AWS keys / PII / credit cards, double-mask before LLM and external output |
 
 ## 🤝 Contributing
 
