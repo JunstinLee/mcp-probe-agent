@@ -1,7 +1,7 @@
 """
-End-to-end integration tests for the complete mcp-probe-agent system.
+End-to-end integration tests for the secure mcp-probe-agent server.
 
-Verifies the full attack cycle, CLI commands, guardrails, and sandbox isolation.
+Verifies the attack cycle, CLI commands, guardrails, and sandbox isolation.
 """
 
 from __future__ import annotations
@@ -49,22 +49,18 @@ async def _call_sse(port: int, tool: str, args: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(scope="module")
-def servers():
-    """Start both servers.  Yield nothing; cleanup after."""
-    procs = []
-    for script in ["src/probe_server.py", "src/probe_server_secure.py"]:
-        proc = subprocess.Popen(
-            [sys.executable, script],
-            cwd=str(ROOT),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        procs.append(proc)
-        time.sleep(2)
+def secure_server():
+    """Start the secure server. Yield nothing; cleanup after."""
+    proc = subprocess.Popen(
+        [sys.executable, "src/probe_server_secure.py"],
+        cwd=str(ROOT),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    time.sleep(2)
     yield
-    for proc in procs:
-        proc.terminate()
-        proc.wait(timeout=5)
+    proc.terminate()
+    proc.wait(timeout=5)
 
 
 # ---------------------------------------------------------------------------
@@ -75,7 +71,7 @@ class TestFullAttackCycle:
     """Run the orchestrator against the secure server and verify the report."""
 
     @pytest.fixture(autouse=True, scope="class")
-    def _servers(self, servers):
+    def _server(self, secure_server):
         pass
 
     def test_secure_server_blocks_known_exploits(self):
@@ -107,7 +103,7 @@ class TestFullAttackCycle:
     def test_orchestrator_produces_valid_report(self):
         """The orchestrator generates a valid JSON report file."""
         result = _run(
-            [sys.executable, str(SRC / "inspector_client.py"), "--target", "secure"],
+            [sys.executable, str(SRC / "inspector_client.py")],
             timeout=60,
         )
         # Report should have been written
@@ -128,10 +124,11 @@ class TestFullAttackCycle:
 class TestCLIEndToEnd:
     """Verify main.py CLI commands work."""
 
-    def test_cli_help_shows_all_commands(self):
+    def test_cli_help_shows_commands(self):
         cp = _run([sys.executable, "main.py", "--help"])
-        assert cp.returncode == 0 or "run-vuln" in cp.stdout
-        assert "run-secure" in cp.stdout or "run-vuln" in cp.stdout
+        assert cp.returncode == 0
+        assert "run" in cp.stdout
+        assert "attack" in cp.stdout
 
     def test_cli_clean_returns_zero(self):
         cp = _run([sys.executable, "main.py", "clean"])
@@ -152,19 +149,11 @@ class TestCLIEndToEnd:
 class TestGuardrailEnforcement:
     """Verify critical guardrails are in place."""
 
-    def test_vulnerable_server_unchanged(self):
-        """probe_server.py must not be modified by this project."""
-        diff = _run(["git", "diff", "--stat", "src/probe_server.py"])
-        assert diff.stdout.strip() == "", (
-            f"probe_server.py was modified:\n{diff.stdout}"
-        )
-
     def test_sandbox_directories_isolated(self):
-        """Vulnerable and secure servers use different sandbox dirs."""
-        import src.probe_server as vuln
+        """Secure server uses a dedicated sandbox dir."""
         import src.probe_server_secure as secure
-        assert vuln.SANDBOX_DIR != secure.SANDBOX_DIR_SECURE, (
-            "Sandbox directories must be isolated"
+        assert secure.SANDBOX_DIR_SECURE == "/tmp/mcp_sandbox_secure", (
+            "Secure server must use isolated sandbox"
         )
 
     def test_secure_server_debug_disabled(self):
@@ -180,17 +169,11 @@ class TestGuardrailEnforcement:
 # ---------------------------------------------------------------------------
 
 class TestSandboxIsolation:
-    """Verify sandbox isolation works correctly for both servers."""
+    """Verify sandbox isolation works correctly for the secure server."""
 
     @pytest.fixture(autouse=True, scope="class")
-    def _servers(self, servers):
+    def _server(self, secure_server):
         pass
-
-    def test_vuln_sandbox_accessible(self):
-        """Vulnerable server sandbox is at /tmp/mcp_sandbox."""
-        r = asyncio.run(_call_sse(8765, "read_secure_file", {"path": "hello.txt"}))
-        assert not r["isError"]
-        assert "Hello" in r["text"]
 
     def test_secure_sandbox_accessible(self):
         """Secure server sandbox is at /tmp/mcp_sandbox_secure."""
@@ -198,9 +181,7 @@ class TestSandboxIsolation:
         assert not r["isError"]
         assert "Hello" in r["text"]
 
-    def test_traversal_vuln_leaks_secure_blocks(self):
-        """A-B: same attack, different behaviour."""
-        v = asyncio.run(_call_sse(8765, "read_secure_file", {"path": "../../etc/passwd"}))
+    def test_traversal_blocked(self):
+        """Secure server must block path traversal."""
         s = asyncio.run(_call_sse(8766, "read_secure_file", {"path": "../../etc/passwd"}))
-        assert not v["isError"], "Vulnerable server must not block traversal"
         assert s["isError"], "Secure server must block traversal"

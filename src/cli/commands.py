@@ -13,26 +13,18 @@ def _python() -> list[str]:
     return [sys.executable]
 
 
-def cmd_run_vuln() -> None:
-    """Start the vulnerable MCP server."""
-    print("[CLI] Starting vulnerable MCP server on port 8765 ...")
-    os.makedirs("/tmp/mcp_sandbox", exist_ok=True)
-    subprocess.run([*_python(), "src/probe_server.py"], check=False)
-
-
-def cmd_run_secure() -> None:
+def cmd_run() -> None:
     """Start the secure MCP server."""
     print("[CLI] Starting secure MCP server on port 8766 ...")
     os.makedirs("/tmp/mcp_sandbox_secure", exist_ok=True)
     subprocess.run([*_python(), "src/probe_server_secure.py"], check=False)
 
 
-def cmd_attack(args) -> None:
+def cmd_attack() -> None:
     """Run the attack orchestrator."""
-    target = args.target or "both"
-    print(f"[CLI] Running attack orchestrator --target={target} ...")
+    print("[CLI] Running attack orchestrator ...")
     subprocess.run(
-        [*_python(), "src/inspector_client.py", "--target", target],
+        [*_python(), "src/inspector_client.py"],
         check=False,
     )
 
@@ -50,7 +42,6 @@ def cmd_test() -> None:
 def cmd_clean() -> None:
     """Remove temporary sandbox directories, log files, and output directory."""
     paths: list[Path] = [
-        Path("/tmp/mcp_sandbox"),
         Path("/tmp/mcp_sandbox_secure"),
     ]
 

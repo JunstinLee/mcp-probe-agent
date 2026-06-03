@@ -1,6 +1,6 @@
 """
 Tests for validate_required_args and server-side argument handling
-on both vulnerable (port 8765) and secure (port 8766) MCP servers.
+on the secure MCP server (port 8766).
 """
 
 from __future__ import annotations
@@ -45,21 +45,7 @@ class TestValidateRequiredArgs:
 # Server fixtures
 # ---------------------------------------------------------------------------
 
-VULN_PORT = 8765
 SECURE_PORT = 8766
-
-
-@pytest.fixture(scope="module")
-def vuln_server():
-    proc = subprocess.Popen(
-        ["python3", "src/probe_server.py"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    time.sleep(3)
-    yield
-    proc.terminate()
-    proc.wait(timeout=5)
 
 
 @pytest.fixture(scope="module")
@@ -100,57 +86,6 @@ def _result_text(result) -> str:
         if hasattr(block, "text"):
             parts.append(block.text)
     return "\n".join(parts)
-
-
-# ---------------------------------------------------------------------------
-# Integration tests: vulnerable server
-# ---------------------------------------------------------------------------
-
-
-class TestVulnServerInputValidation:
-    """Test argument handling on the vulnerable (unvalidated) server."""
-
-    @pytest.fixture(autouse=True, scope="class")
-    def _start_vuln(self, vuln_server):
-        """Ensure the vulnerable server is running for all tests in this class."""
-
-    def test_read_file_missing_path_returns_error(self):
-        """Vulnerable server: missing 'path' → MCP SDK schema validation rejects it."""
-        result = call_tool_sync(VULN_PORT, "read_secure_file", {})
-        text = _result_text(result)
-        assert result.isError or "[ERR]" in text or "error" in text.lower()
-
-    def test_write_file_missing_content_returns_error(self):
-        result = call_tool_sync(VULN_PORT, "write_file", {"path": "test.txt"})
-        text = _result_text(result)
-        assert result.isError or "[OK]" in text or "[ERR]" in text or "error" in text.lower()
-
-    def test_nonexistent_tool_returns_error(self):
-        """Vulnerable server returns 'Unknown tool' text for unrecognized tools."""
-        result = call_tool_sync(VULN_PORT, "nonexistent_tool", {})
-        text = _result_text(result)
-        assert "Unknown tool" in text or result.isError
-
-    def test_query_secrets_returns_passwords(self):
-        """Vulnerable server leaks the secrets table."""
-        result = call_tool_sync(VULN_PORT, "query_mock_db", {"table": "secrets"})
-        text = _result_text(result)
-        assert "sk-mock-123456789" in text or "hunter2" in text
-
-    def test_query_users_returns_data(self):
-        """Vulnerable server returns user data from the users table."""
-        result = call_tool_sync(VULN_PORT, "query_mock_db", {"table": "users"})
-        text = _result_text(result)
-        assert "Alice" in text
-
-    def test_read_file_with_extra_arg(self):
-        """Vulnerable server ignores unknown arguments (no validation)."""
-        result = call_tool_sync(
-            VULN_PORT, "read_secure_file", {"path": "hello.txt", "reason": "test"}
-        )
-        text = _result_text(result)
-        # Should still work — vulnerable server doesn't reject unknown keys
-        assert "[OK]" in text or "[ERR]" in text
 
 
 # ---------------------------------------------------------------------------

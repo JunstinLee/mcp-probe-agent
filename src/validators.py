@@ -14,12 +14,12 @@ from pathlib import Path
 # Shell metacharacter guard (shared across validators)
 # ---------------------------------------------------------------------------
 
-_SHELL_META_RE = re.compile(r"[;|&$`\\n<>{}\\\[\\]]")
+_SHELL_METACHARS = frozenset(";|&$`\n<>{}[]")
 
 
 def _reject_shell_meta(value: str, field_name: str = "path") -> None:
     """Raise ValueError if `value` contains shell metacharacters."""
-    if _SHELL_META_RE.search(value):
+    if any(ch in _SHELL_METACHARS for ch in value):
         raise ValueError(f"{field_name} contains shell metacharacters")
 
 

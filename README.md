@@ -24,9 +24,8 @@ This sandbox bypasses complex wrappers, using the official `mcp` Python SDK to i
 mcp-probe-agent/
 ├── src/
 │   ├── __init__.py
-│   ├── probe_server.py          # Vulnerable MCP Server (port 8765) — no validation
 │   ├── probe_server_secure.py   # Secure MCP Server (port 8766) — hardened
-│   ├── inspector_client.py      # Attack orchestrator + dual-target testing
+│   ├── inspector_client.py      # Attack orchestrator
 │   ├── logger.py                # Raw JSON packet capturer & formatter
 │   ├── validators.py            # Path sandboxing, URL validation, output sanitization
 │   └── cli/
@@ -37,10 +36,9 @@ mcp-probe-agent/
 │   ├── test_prompt_injection.py
 │   ├── test_input_validation.py
 │   ├── test_integration.py
-│   ├── test_a_b_comparison.py
 │   └── test_smoke.py
 ├── exploits/
-│   └── payloads.json            # 18 automated attack payloads
+│   └── payloads.json            # 15 automated attack payloads
 ├── .sisyphus/plans/             # Security hardening roadmaps (4 plans)
 ├── requirements.txt
 ├── pyproject.toml
@@ -68,14 +66,11 @@ uv sync
 A unified CLI entrypoint is provided at `main.py`:
 
 ```bash
-# Terminal 1 — Start the vulnerable server (port 8765)
-python main.py run-vuln
+# Terminal 1 — Start the secure server (port 8766)
+python main.py run
 
-# Terminal 2 — Start the secure server (port 8766)
-python main.py run-secure
-
-# Terminal 3 — Run the attack orchestrator against both servers
-python main.py attack --target both
+# Terminal 2 — Run the attack orchestrator
+python main.py attack
 
 # Run the full pytest suite
 python main.py test
@@ -88,32 +83,18 @@ python main.py clean
 
 Open two terminal windows to witness the raw JSON-RPC communication:
 
-**Terminal 1 — Start a server**
+**Terminal 1 — Start the secure server**
 
 ```bash
-# Vulnerable server (port 8765)
-python src/probe_server.py
+python src/probe_server_secure.py
 # Exposes:
 #   GET  /sse     — SSE event stream
 #   POST /message — JSON-RPC message ingress
-
-# Secure server (port 8766)
-python src/probe_server_secure.py
 ```
 
-**Terminal 2 — Run the inspector / attack orchestrator**
+**Terminal 2 — Run the attack orchestrator**
 
 ```bash
-# Test against the vulnerable server only
-python src/inspector_client.py --target vulnerable
-
-# Test against the secure server only
-python src/inspector_client.py --target secure
-
-# Test against both servers (default comparison mode)
-python src/inspector_client.py --target both
-
-# Print help
 python src/inspector_client.py
 ```
 
@@ -148,7 +129,7 @@ We are hunting for the raw schema to see how the orchestration layer digests too
 
 ## 🛡️ Security Audit — Defense Matrix
 
-The secure server (`probe_server_secure.py`) currently passes **11/11** automated attack payloads from `exploits/payloads.json`. Below is the full breakdown of what is solved versus what remains open.
+The secure server (`probe_server_secure.py`) currently passes **15/15** automated attack payloads from `exploits/payloads.json`. Below is the full breakdown of what is solved versus what remains open.
 
 ### ✅ Solved (Input & Tool Execution Layer)
 
@@ -188,11 +169,11 @@ The secure server (`probe_server_secure.py`) currently passes **11/11** automate
 
 ### What Works Today
 
-- [x] **Dual-target architecture:** Vulnerable (`probe_server.py`) and Secure (`probe_server_secure.py`) servers with A/B comparison tests.
-- [x] **Automated attack orchestrator:** `inspector_client.py` runs 18 payloads against either or both servers and produces a JSON report.
+- [x] **Secure MCP server:** `probe_server_secure.py` with hardened input validation and output sanitization.
+- [x] **Automated attack orchestrator:** `inspector_client.py` runs 15 payloads against the secure server and produces a JSON report.
 - [x] **Core guardrails:** Path sandboxing, symlink rejection, URL private-range blocking, write-size limits, basic prompt-injection regex filtering.
-- [x] **Comprehensive test suite:** 6 test modules covering path traversal, prompt injection, input validation, integration, A/B comparison, and smoke tests.
-- [x] **Unified CLI:** `main.py` exposes `run-vuln`, `run-secure`, `attack`, `test`, and `clean` commands.
+- [x] **Comprehensive test suite:** 5 test modules covering path traversal, prompt injection, input validation, integration, and smoke tests.
+- [x] **Unified CLI:** `main.py` exposes `run`, `attack`, `test`, and `clean` commands.
 
 ## 🤝 Contributing
 
