@@ -10,6 +10,7 @@ Covers:
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import os
 from unittest.mock import patch
@@ -100,11 +101,11 @@ class TestHITLRouter:
 
     def test_prompt_for_approval_yes(self):
         with patch("builtins.input", return_value="yes"):
-            assert prompt_for_approval("write_file", {"path": "x"}) is True
+            assert asyncio.run(prompt_for_approval("write_file", {"path": "x"})) is True
 
     def test_prompt_for_approval_no(self):
         with patch("builtins.input", return_value="no"):
-            assert prompt_for_approval("write_file", {"path": "x"}) is False
+            assert asyncio.run(prompt_for_approval("write_file", {"path": "x"})) is False
 
     def test_high_risk_tools_set_complete(self):
         assert "write_file" in HIGH_RISK_TOOLS

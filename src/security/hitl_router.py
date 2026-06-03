@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from enum import Enum
 
@@ -23,8 +24,10 @@ def require_human_approval(tool_name: str, arguments: dict) -> bool:
     return classify_risk(tool_name) == RiskLevel.HIGH
 
 
-def prompt_for_approval(tool_name: str, arguments: dict) -> bool:
+async def prompt_for_approval(tool_name: str, arguments: dict) -> bool:
     print(f"\n[HITL] 高危操作请求: {tool_name}")
     print(f"[HITL] 参数: {arguments}")
-    response = input("[HITL] 是否允许执行？输入 yes 确认，其他任意键拒绝: ").strip().lower()
-    return response == "yes"
+    response = await asyncio.to_thread(
+        input, "[HITL] 是否允许执行？输入 yes 确认，其他任意键拒绝: "
+    )
+    return response.strip().lower() == "yes"

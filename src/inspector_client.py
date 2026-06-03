@@ -215,12 +215,12 @@ async def _run_payloads_against_server(
     try:
         async with connect_server(port) as session:
             for payload in payloads:
-                if budget.is_exhausted():
-                    raise RuntimeError(
-                        f"Budget exhausted: turns={budget.turn_count}, "
-                        f"tokens={budget.estimated_tokens}"
-                    )
                 try:
+                    if budget.is_exhausted():
+                        raise RuntimeError(
+                            f"Budget exhausted: turns={budget.turn_count}, "
+                            f"tokens={budget.estimated_tokens}"
+                        )
                     # Special-case: test /message endpoint without Bearer token
                     if payload.get("name") == "Missing Bearer token on message endpoint":
                         actual, details = _test_message_endpoint_auth(port)
