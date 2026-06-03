@@ -26,6 +26,7 @@ from fastmcp.exceptions import ToolError
 from starlette.middleware import Middleware
 
 from src.middleware.auth import BearerAuthMiddleware
+from src.security.hitl_router import prompt_for_approval, require_human_approval
 from src.validators import (
     sanitize_output,
     validate_required_args,
@@ -110,6 +111,10 @@ MAX_WRITE_SIZE = 1024 * 1024  # 1 MB
 @server.tool()
 def write_file(path: str, content: str, user_id: str = "anonymous") -> str:
     """Write content to a file in the per-user sandbox."""
+    if require_human_approval("write_file", {"path": path, "content_len": len(content)}):
+        if not prompt_for_approval("write_file", {"path": path}):
+            raise ToolError("HITL: operation rejected by human operator")
+
     if len(content) > MAX_WRITE_SIZE:
         raise ToolError(
             f"Security: content exceeds maximum write size of {MAX_WRITE_SIZE} bytes"

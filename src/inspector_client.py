@@ -27,6 +27,7 @@ from mcp import ClientSession, types
 from mcp.client.sse import sse_client
 
 from logger import flush, get_run_dir, log_packet
+from src.security.token_budget import SessionBudget
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -206,6 +207,7 @@ async def _run_payloads_against_server(
     payloads: list[dict[str, Any]],
     port: int,
     server_label: str,
+    budget: SessionBudget,
 ) -> list[dict[str, Any]]:
     """Run *payloads* against a single server, returning result dicts."""
     results: list[dict[str, Any]] = []
@@ -213,6 +215,11 @@ async def _run_payloads_against_server(
     try:
         async with connect_server(port) as session:
             for payload in payloads:
+                if budget.is_exhausted():
+                    raise RuntimeError(
+                        f"Budget exhausted: turns={budget.turn_count}, "
+                        f"tokens={budget.estimated_tokens}"
+                    )
                 try:
                     # Special-case: test /message endpoint without Bearer token
                     if payload.get("name") == "Missing Bearer token on message endpoint":
@@ -233,6 +240,7 @@ async def _run_payloads_against_server(
                             f"expected={payload['expected_outcome']}, "
                             f"actual={actual}"
                         )
+                        budget.record_turn()
                         continue
 
                     result = await execute_attack(session, payload)
@@ -244,6 +252,7 @@ async def _run_payloads_against_server(
                         f"expected={entry['expected_outcome']}, "
                         f"actual={entry['actual_outcome']}"
                     )
+                    budget.record_turn()
                 except Exception as exc:
                     results.append({
                         "payload_name": payload["name"],
@@ -272,12 +281,13 @@ async def _run_payloads_against_server(
 async def orchestrate() -> None:
     """Run all secure-target payloads against the secure server."""
     payloads = load_payloads("secure")
+    budget = SessionBudget()
     print(
         f"[ORCHESTRATOR] Running {len(payloads)} payloads "
         f"against SECURE server (port {SECURE_PORT})"
     )
     results = await _run_payloads_against_server(
-        payloads, SECURE_PORT, "secure"
+        payloads, SECURE_PORT, "secure", budget
     )
     report_path = generate_report(results)
 
