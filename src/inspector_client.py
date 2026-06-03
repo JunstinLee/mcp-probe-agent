@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import http.client
 import json
 import warnings
 from contextlib import asynccontextmanager
@@ -79,7 +80,7 @@ async def connect_server(port: int):
     """Connect to an MCP server on *port* and yield an initialized session."""
     url = f"http://127.0.0.1:{port}/sse"
     print(f"[ORCHESTRATOR] Connecting to {url} ...")
-    async with sse_client(url) as (read_stream, write_stream):
+    async with sse_client(url, headers={"Authorization": "Bearer test-api-key"}) as (read_stream, write_stream):
         async with ClientSession(read_stream, write_stream) as session:
             init_result = await session.initialize()
             print(
@@ -174,6 +175,30 @@ def generate_report(
 
 
 # ---------------------------------------------------------------------------
+# Network-layer checks (bypass SSE session)
+# ---------------------------------------------------------------------------
+
+def _test_message_endpoint_auth(port: int) -> tuple[str, str]:
+    """POST to /message without Authorization; return (outcome, details)."""
+    conn = http.client.HTTPConnection("127.0.0.1", port)
+    try:
+        conn.request(
+            "POST",
+            "/message",
+            body=b"{}",
+            headers={"Content-Type": "application/json"},
+        )
+        response = conn.getresponse()
+        if response.status == 401:
+            return "blocked", f"HTTP {response.status}: {response.reason}"
+        return "leaked", f"HTTP {response.status}: {response.reason}"
+    except Exception as exc:
+        return "error", f"HTTP request failed: {exc}"
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
 
@@ -189,6 +214,27 @@ async def _run_payloads_against_server(
         async with connect_server(port) as session:
             for payload in payloads:
                 try:
+                    # Special-case: test /message endpoint without Bearer token
+                    if payload.get("name") == "Missing Bearer token on message endpoint":
+                        actual, details = _test_message_endpoint_auth(port)
+                        passed = actual == payload["expected_outcome"]
+                        entry = {
+                            "payload_name": payload["name"],
+                            "target_server": server_label,
+                            "expected_outcome": payload["expected_outcome"],
+                            "actual_outcome": actual,
+                            "passed": passed,
+                            "details": details,
+                        }
+                        results.append(entry)
+                        status = "PASS" if passed else "FAIL"
+                        print(
+                            f"  [{status}] {payload['name']} ({server_label}): "
+                            f"expected={payload['expected_outcome']}, "
+                            f"actual={actual}"
+                        )
+                        continue
+
                     result = await execute_attack(session, payload)
                     entry = _evaluate_result(result, payload, server_label)
                     results.append(entry)

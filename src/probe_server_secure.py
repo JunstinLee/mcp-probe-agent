@@ -1,13 +1,13 @@
 """
-Secure MCP Server with input validation, path sandboxing, and output sanitization.
+Secure MCP Server with input validation, path sandboxing, output sanitization,
+Bearer token authentication, and multi-tenant isolation.
 
 Run with:
     python src/probe_server_secure.py
 
-Uses FastMCP's @server.tool() decorator pattern instead of manual
-list_tools/call_tool handlers. All paths are validated against a
-sandbox directory, DB access is restricted, and scraper output is
-sanitized to prevent prompt injection.
+Uses FastMCP's @server.tool() decorator pattern. All paths are validated against
+a per-user sandbox directory, DB access is restricted, scraper output is sanitized,
+and SSE endpoints require Bearer token authentication.
 """
 
 from __future__ import annotations
@@ -23,7 +23,9 @@ if _project_root not in sys.path:
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
+from starlette.middleware import Middleware
 
+from src.middleware.auth import BearerAuthMiddleware
 from src.validators import (
     sanitize_output,
     validate_required_args,
@@ -31,7 +33,7 @@ from src.validators import (
     validate_url,
 )
 
-SANDBOX_DIR_SECURE = "/tmp/mcp_sandbox_secure"
+SANDBOX_BASE_DIR = "/tmp/mcp_sandbox_secure"
 
 MOCK_DB: dict[str, dict[str, str]] = {
     "users": {
@@ -48,11 +50,25 @@ MOCK_DB: dict[str, dict[str, str]] = {
 server = FastMCP("mcp-probe-server-secure", strict_input_validation=True)
 
 
+# ---------------------------------------------------------------------------
+# Multi-tenant sandbox helper
+# ---------------------------------------------------------------------------
+
+def _get_user_sandbox(user_id: str = "anonymous") -> str:
+    """Return the per-user sandbox directory path."""
+    return os.path.join(SANDBOX_BASE_DIR, user_id)
+
+
+# ---------------------------------------------------------------------------
+# Tool definitions
+# ---------------------------------------------------------------------------
+
 @server.tool()
-def read_secure_file(path: str) -> str:
-    """Read a file from the secure sandbox."""
+def read_secure_file(path: str, user_id: str = "anonymous") -> str:
+    """Read a file from the secure per-user sandbox."""
+    sandbox = _get_user_sandbox(user_id)
     try:
-        target = validate_sandbox_path(path, SANDBOX_DIR_SECURE)
+        target = validate_sandbox_path(path, sandbox)
     except ValueError as exc:
         raise ToolError(f"Security: path traversal detected — {exc}")
 
@@ -92,15 +108,16 @@ MAX_WRITE_SIZE = 1024 * 1024  # 1 MB
 
 
 @server.tool()
-def write_file(path: str, content: str) -> str:
-    """Write content to a file in the sandbox."""
+def write_file(path: str, content: str, user_id: str = "anonymous") -> str:
+    """Write content to a file in the per-user sandbox."""
     if len(content) > MAX_WRITE_SIZE:
         raise ToolError(
             f"Security: content exceeds maximum write size of {MAX_WRITE_SIZE} bytes"
         )
 
+    sandbox = _get_user_sandbox(user_id)
     try:
-        target = validate_sandbox_path(path, SANDBOX_DIR_SECURE)
+        target = validate_sandbox_path(path, sandbox)
     except ValueError as exc:
         raise ToolError(f"Security: path traversal detected — {exc}")
 
@@ -132,13 +149,28 @@ def scrape_webpage(url: str) -> str:
     return sanitize_output(raw)
 
 
+# ---------------------------------------------------------------------------
+# Entrypoint with auth middleware
+# ---------------------------------------------------------------------------
+
 if __name__ == "__main__":
-    os.makedirs(SANDBOX_DIR_SECURE, exist_ok=True)
-    seed = os.path.join(SANDBOX_DIR_SECURE, "hello.txt")
+    # Ensure base sandbox dir exists
+    os.makedirs(SANDBOX_BASE_DIR, exist_ok=True)
+    # Seed the default anonymous sandbox
+    seed_dir = _get_user_sandbox("anonymous")
+    os.makedirs(seed_dir, exist_ok=True)
+    seed = os.path.join(seed_dir, "hello.txt")
     if not os.path.exists(seed):
         with open(seed, "w", encoding="utf-8") as fh:
             fh.write("Hello from the MCP probe sandbox.\n")
 
     print(f"Starting secure MCP probe server on http://127.0.0.1:8766")
-    print(f"  Sandbox dir: {SANDBOX_DIR_SECURE}")
-    server.run(transport="sse", host="127.0.0.1", port=8766)
+    print(f"  Sandbox base: {SANDBOX_BASE_DIR}")
+    print(f"  Auth disabled: {os.environ.get('MCP_AUTH_DISABLE') == '1'}")
+
+    server.run(
+        transport="sse",
+        host="127.0.0.1",
+        port=8766,
+        middleware=[Middleware(BearerAuthMiddleware)],
+    )

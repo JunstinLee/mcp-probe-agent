@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import re
+import socket
 from pathlib import Path
 
 
@@ -140,11 +141,25 @@ _BLOCKED_HOST_RE = re.compile(
 def validate_url(url: str) -> None:
     """
     Reject URLs that point to private/internal networks or cloud metadata endpoints.
+    Performs both string-level and socket-level (DNS resolved IP) checks to prevent
+    DNS rebinding attacks.
 
-    Raises ValueError if the host matches a blocked prefix.
+    Raises ValueError if the host matches a blocked prefix or resolves to one.
     """
     from urllib.parse import urlparse
     parsed = urlparse(url)
     host = parsed.hostname or ""
+
     if _BLOCKED_HOST_RE.match(host):
         raise ValueError(f"access to internal address {host} is forbidden")
+
+    try:
+        addr_info = socket.getaddrinfo(host, None)
+        for _, _, _, _, sockaddr in addr_info:
+            ip = str(sockaddr[0])
+            if _BLOCKED_HOST_RE.match(ip):
+                raise ValueError(
+                    f"DNS resolved to internal address {ip}, access forbidden"
+                )
+    except socket.gaierror:
+        raise ValueError(f"cannot resolve host {host}")
