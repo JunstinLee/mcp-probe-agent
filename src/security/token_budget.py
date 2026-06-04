@@ -4,8 +4,8 @@ from __future__ import annotations
 
 
 class SessionBudget:
-    MAX_TURNS = 50
-    MAX_ESTIMATED_TOKENS = 100_000
+    MAX_TURNS = 20
+    MAX_ESTIMATED_TOKENS = 20_000
 
     def __init__(self):
         self.turn_count = 0
