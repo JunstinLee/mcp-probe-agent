@@ -65,16 +65,18 @@ Arguments must match `^[A-Za-z0-9_./\-]+$` and cannot exceed 4096 characters.
 
 **File**: `src/validators.py` — `sanitize_output()`
 
-Tool outputs are sanitized through a 4-stage pipeline before reaching the LLM context:
+Tool outputs are sanitized through a multi-stage pipeline before reaching the LLM context. All detection stages raise `ValueError` on match (fail-closed), which the server converts to `ToolError`:
 
 1. **Unicode normalization** — Applies `unicodedata.normalize("NFKC", text)` to collapse fullwidth and compatibility characters (e.g. `Ｉｇｎｏｒｅ` → `Ignore`).
-2. **Base64 decoding** — Scans for Base64 segments (`[A-Za-z0-9+/]{40,}={0,2}`), decodes them, and checks the plaintext for injection patterns. Encoded payloads are replaced with `[FILTERED-B64]`.
+2. **Base64 decoding** — Scans for Base64 segments (`[A-Za-z0-9+/]{40,}={0,2}`), decodes them, and checks the plaintext for injection patterns. Encoded payloads are replaced with `[FILTERED-B64]`; if any filtered segment is found, raises `ValueError`.
 3. **Injection pattern detection** — Matches English trigger phrases via regex:
    `(ignore|disregard|forget)\s+(all\s+)?(previous|prior|above|before)\s+(instructions?|directives?|prompts?)`
-   Hits are replaced with `[FILTERED]`.
-4. **Delimiter breakout detection** — Matches `` `\`\`\`system...`\`\`\` `` patterns and replaces them with `[FILTERED-DELIMITER]`.
+   Raises `ValueError` on match.
+4. **Delimiter breakout detection** — Matches `` ```system...``` `` patterns and `</EXTERNAL_CONTEXT>.*(system instruction|ignore|override|disregard)` sequences. Raises `ValueError` on match.
 
-**Output wrapper**: Sanitized content is wrapped in `<EXTERNAL_CONTEXT>` tags with an explicit warning that the content is untrusted and must never be interpreted as system instructions.
+**Output wrapper**: If all stages pass, sanitized content is wrapped in `<EXTERNAL_CONTEXT>` tags with an explicit warning that the content is untrusted and must never be interpreted as system instructions.
+
+**Guardrail integration**: After sanitization, the server calls `guardrail_check()` from `src/security/guardrail.py` for an additional semantic safety review. It can `allow` (pass through), `block` (raise `ToolError`), or `mask` (return degraded output prefixed with `[MASKED]`). Controlled via `MCP_GUARDRAIL_MODE` env var (`off` / `local` / `remote`).
 
 ---
 
