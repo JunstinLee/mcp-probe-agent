@@ -20,7 +20,7 @@ _MAX_ARG_LEN = 4096
 _WHITELIST_RE = re.compile(r"^[A-Za-z0-9_./\-]+$")
 
 
-def validate_command_arg(value: str) -> str:
+def validate_command_arg(value: str, allow_options: bool = False) -> str:
     """
     Validate that ``value`` is safe to pass as a command-line argument.
 
@@ -28,9 +28,13 @@ def validate_command_arg(value: str) -> str:
         - Not empty or pure whitespace.
         - Length <= 4096 characters.
         - Contains only whitelisted characters.
+        - If ``allow_options`` is False, rejects values starting with ``-``
+          (which could be interpreted as command-line options/flags).
 
     Args:
         value: The argument string to validate.
+        allow_options: If True, allows values starting with ``-``.
+                       Use only for known-safe option arguments.
 
     Returns:
         The original string (for convenience in call chains).
@@ -48,6 +52,12 @@ def validate_command_arg(value: str) -> str:
         raise ValueError(
             "argument contains forbidden characters; "
             "allowed: A-Z a-z 0-9 _ . / -"
+        )
+
+    if not allow_options and value.startswith("-"):
+        raise ValueError(
+            "argument starts with '-' which may be interpreted as a command-line option; "
+            "use '--' before passing user data"
         )
 
     return value

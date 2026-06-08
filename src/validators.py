@@ -83,6 +83,11 @@ _INJECTION_RE = re.compile(
 
 _DELIMITER_RE = re.compile(r"(?i)```system.*?```", re.DOTALL)
 
+_TAG_BREAKOUT_RE = re.compile(
+    r"</EXTERNAL_CONTEXT>.*?(system\s+instruction|ignore|override|disregard)",
+    re.DOTALL | re.IGNORECASE,
+)
+
 _B64_RE = re.compile(r"[A-Za-z0-9+/]{40,}={0,2}")
 
 
@@ -112,6 +117,9 @@ def sanitize_output(text: str) -> str:
 
     if _DELIMITER_RE.search(b64_checked):
         raise ValueError("delimiter breakout detected")
+
+    if _TAG_BREAKOUT_RE.search(b64_checked):
+        raise ValueError("tag breakout detected — closing delimiter followed by instructions")
 
     return (
         "<EXTERNAL_CONTEXT>\n"
@@ -164,15 +172,59 @@ _BLOCKED_HOST_RE = re.compile(
 )
 
 
-def validate_url(url: str) -> None:
-    """
-    Reject URLs that point to private/internal networks or cloud metadata endpoints.
-    Performs both string-level and socket-level (DNS resolved IP) checks to prevent
-    DNS rebinding attacks.
+class ResolvedUrl:
+    """Result of URL validation with resolved IP for IP pinning."""
 
-    Raises ValueError if the host matches a blocked prefix or resolves to one.
+    __slots__ = ("original_url", "resolved_ip", "hostname", "port", "scheme")
+
+    def __init__(
+        self,
+        original_url: str,
+        resolved_ip: str,
+        hostname: str,
+        port: int,
+        scheme: str,
+    ):
+        self.original_url = original_url
+        self.resolved_ip = resolved_ip
+        self.hostname = hostname
+        self.port = port
+        self.scheme = scheme
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ResolvedUrl):
+            return NotImplemented
+        return (
+            self.original_url == other.original_url
+            and self.resolved_ip == other.resolved_ip
+            and self.hostname == other.hostname
+            and self.port == other.port
+            and self.scheme == other.scheme
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"ResolvedUrl(hostname={self.hostname!r}, resolved_ip={self.resolved_ip!r}, "
+            f"port={self.port}, scheme={self.scheme!r})"
+        )
+
+
+def validate_url(url: str) -> ResolvedUrl:
+    """
+    Validate a URL and return its resolved components for subsequent IP-pinned requests.
+
+    Performs both string-level and socket-level (DNS resolved IP) checks to prevent
+    DNS rebinding attacks. The returned ``ResolvedUrl`` can be used to pin HTTP
+    connections to the verified IP address while preserving the original Host header.
+
+    Returns:
+        ``ResolvedUrl`` with the original URL, resolved IP, hostname, port, and scheme.
+
+    Raises:
+        ValueError: If the host matches a blocked prefix or resolves to one.
     """
     from urllib.parse import urlparse
+
     parsed = urlparse(url)
     host = parsed.hostname or ""
 
@@ -181,11 +233,25 @@ def validate_url(url: str) -> None:
 
     try:
         addr_info = socket.getaddrinfo(host, None)
+        resolved_ip = ""
         for _, _, _, _, sockaddr in addr_info:
             ip = str(sockaddr[0])
             if _BLOCKED_HOST_RE.match(ip):
                 raise ValueError(
                     f"DNS resolved to internal address {ip}, access forbidden"
                 )
+            if not resolved_ip:
+                resolved_ip = ip
     except socket.gaierror:
         raise ValueError(f"cannot resolve host {host}")
+
+    scheme = parsed.scheme or "http"
+    port = parsed.port or (443 if scheme == "https" else 80)
+
+    return ResolvedUrl(
+        original_url=url,
+        resolved_ip=resolved_ip,
+        hostname=host,
+        port=port,
+        scheme=scheme,
+    )

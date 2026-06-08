@@ -112,7 +112,8 @@ def log_packet(direction: str, payload: dict[str, Any] | str) -> None:
         "payload": body,
     }
 
-    if os.environ.get("MCP_LOG_REDACT") == "1":
+    # Redaction is ON by default. Set MCP_LOG_NO_REDACT=1 to disable (debug only).
+    if os.environ.get("MCP_LOG_NO_REDACT") != "1":
         entry = _redact_sensitive(entry)
 
     _capture_buffer.append(entry)
