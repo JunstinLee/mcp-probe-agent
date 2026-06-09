@@ -246,6 +246,4 @@ if __name__ == "__main__":
         host="127.0.0.1",
         port=8766,
         middleware=[Middleware(BearerAuthMiddleware)],
-        timeout_keep_alive=30,
-        limit_max_requests=1000,
     )
